@@ -23,16 +23,15 @@ class ImmichClient:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
     
-    def search_album_assets_without_tag(self, album_id: str, exclude_tag_id: str) -> List[Dict[str, Any]]:
+    def search_untagged_album_assets(self, album_id: str) -> List[Dict[str, Any]]:
         """
-        Search for assets in an album that don't have any tags (tagIds: null)
+        Search for assets in an album that don't have any tags
         
         Args:
             album_id: Album UUID
-            exclude_tag_id: Not used anymore, kept for compatibility
             
         Returns:
-            List of asset dictionaries that are in the album and have no tags
+            List of untagged asset dictionaries from the album
             
         Raises:
             requests.RequestException: If API request fails
@@ -74,35 +73,6 @@ class ImmichClient:
             
         except requests.RequestException as e:
             logger.error(f"Failed to search album assets: {e}")
-            raise
-    
-    def get_album_assets(self, album_id: str) -> List[Dict[str, Any]]:
-        """
-        Get all assets from an album
-        
-        Args:
-            album_id: Album UUID
-            
-        Returns:
-            List of asset dictionaries
-            
-        Raises:
-            requests.RequestException: If API request fails
-        """
-        url = f"{self.base_url}/albums/{album_id}"
-        
-        try:
-            response = self.session.get(url)
-            response.raise_for_status()
-            
-            album_data = response.json()
-            assets = album_data.get("assets", [])
-            
-            logger.debug(f"Retrieved {len(assets)} assets from album {album_id}")
-            return assets
-            
-        except requests.RequestException as e:
-            logger.error(f"Failed to get album assets: {e}")
             raise
     
     def download_asset(self, asset_id: str, output_path: str) -> None:
@@ -160,33 +130,6 @@ class ImmichClient:
             logger.error(f"Failed to download thumbnail for asset {asset_id}: {e}")
             raise
     
-    def create_tag(self, tag_name: str) -> Dict[str, Any]:
-        """
-        Create a new tag in Immich
-        
-        Args:
-            tag_name: Name of the tag to create
-            
-        Returns:
-            Tag object with id
-            
-        Raises:
-            requests.RequestException: If API request fails
-        """
-        url = f"{self.base_url}/tags"
-        
-        try:
-            response = self.session.post(url, json={"name": tag_name})
-            response.raise_for_status()
-            
-            tag = response.json()
-            logger.debug(f"Created tag '{tag_name}' with ID {tag.get('id')}")
-            return tag
-            
-        except requests.RequestException as e:
-            logger.error(f"Failed to create tag '{tag_name}': {e}")
-            raise
-    
     def get_or_create_tag(self, tag_name: str) -> str:
         """
         Get existing tag by name or create if it doesn't exist
@@ -200,10 +143,10 @@ class ImmichClient:
         Raises:
             requests.RequestException: If API request fails
         """
-        # Try to get all tags and find matching name
         url = f"{self.base_url}/tags"
         
         try:
+            # Try to get existing tags
             response = self.session.get(url)
             response.raise_for_status()
             
@@ -214,60 +157,16 @@ class ImmichClient:
                     return tag['id']
             
             # Tag doesn't exist, create it
-            tag = self.create_tag(tag_name)
-            return tag['id']
+            response = self.session.post(url, json={"name": tag_name})
+            response.raise_for_status()
+            
+            new_tag = response.json()
+            logger.debug(f"Created tag '{tag_name}' with ID {new_tag.get('id')}")
+            return new_tag['id']
             
         except requests.RequestException as e:
             logger.error(f"Failed to get or create tag '{tag_name}': {e}")
             raise
-    
-    def get_asset_tags(self, asset_id: str) -> List[str]:
-        """
-        Get all tags for a specific asset
-        
-        Args:
-            asset_id: Asset UUID
-            
-        Returns:
-            List of tag names
-            
-        Raises:
-            requests.RequestException: If API request fails
-        """
-        url = f"{self.base_url}/assets/{asset_id}"
-        
-        try:
-            response = self.session.get(url)
-            response.raise_for_status()
-            
-            asset_data = response.json()
-            tags = asset_data.get('tags', [])
-            tag_names = [tag.get('name') for tag in tags if tag.get('name')]
-            
-            logger.debug(f"Asset {asset_id} has tags: {tag_names}")
-            return tag_names
-            
-        except requests.RequestException as e:
-            logger.error(f"Failed to get tags for asset {asset_id}: {e}")
-            raise
-    
-    def asset_has_tag(self, asset_id: str, tag_name: str) -> bool:
-        """
-        Check if an asset has a specific tag
-        
-        Args:
-            asset_id: Asset UUID
-            tag_name: Tag name to check for
-            
-        Returns:
-            True if asset has the tag, False otherwise
-        """
-        try:
-            tags = self.get_asset_tags(asset_id)
-            return tag_name in tags
-        except Exception as e:
-            logger.warning(f"Could not check tags for asset {asset_id}, assuming not tagged: {e}")
-            return False
     
     def tag_assets(self, tag_id: str, asset_ids: List[str]) -> None:
         """
