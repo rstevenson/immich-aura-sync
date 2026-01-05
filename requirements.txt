@@ -1,0 +1,6 @@
+pyyaml>=6.0.1
+requests>=2.31.0
+loguru>=0.7.0
+
+# Auraframes library (local path for now, will be pip package later)
+# For now, assume it's installed separately or copied into project
